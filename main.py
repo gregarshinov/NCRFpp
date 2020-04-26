@@ -6,11 +6,13 @@
 
 from __future__ import print_function
 import time
+import datetime
 import sys
 import argparse
 import random
 import torch
 import gc
+import json
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
@@ -378,98 +380,115 @@ def train(data):
     best_dev = -10
     # data.HP_iteration = 1
     ## start training
-    for idx in range(data.HP_iteration):
-        epoch_start = time.time()
-        temp_start = epoch_start
-        print("Epoch: %s/%s" %(idx,data.HP_iteration))
-        if data.optimizer == "SGD":
-            optimizer = lr_decay(optimizer, idx, data.HP_lr_decay, data.HP_lr)
-        instance_count = 0
-        sample_id = 0
-        sample_loss = 0
-        total_loss = 0
-        right_token = 0
-        whole_token = 0
-        random.shuffle(data.train_Ids)
-        print("Shuffle: first input word list:", data.train_Ids[0][0])
-        ## set model in train model
-        model.train()
-        model.zero_grad()
-        batch_size = data.HP_batch_size
-        batch_id = 0
-        train_num = len(data.train_Ids)
-        total_batch = train_num//batch_size+1
-        for batch_id in range(total_batch):
-            start = batch_id*batch_size
-            end = (batch_id+1)*batch_size
-            if end >train_num:
-                end = train_num
-            instance = data.train_Ids[start:end]
-            if not instance:
-                continue
-            batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask  = batchify_with_label(instance, data.HP_gpu, True, data.sentence_classification)
-            instance_count += 1
-            loss, tag_seq = model.calculate_loss(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, batch_label, mask)
-            right, whole = predict_check(tag_seq, batch_label, mask, data.sentence_classification)
-            right_token += right
-            whole_token += whole
-            # print("loss:",loss.item())
-            sample_loss += loss.item()
-            total_loss += loss.item()
-            if end%500 == 0:
-                temp_time = time.time()
-                temp_cost = temp_time - temp_start
-                temp_start = temp_time
-                print("     Instance: %s; Time: %.2fs; loss: %.4f; acc: %s/%s=%.4f"%(end, temp_cost, sample_loss, right_token, whole_token,(right_token+0.)/whole_token))
-                if sample_loss > 1e8 or str(sample_loss) == "nan":
-                    print("ERROR: LOSS EXPLOSION (>1e8) ! PLEASE SET PROPER PARAMETERS AND STRUCTURE! EXIT....")
-                    exit(1)
-                sys.stdout.flush()
-                sample_loss = 0
-            loss.backward()
-            optimizer.step()
+    iters_without_change = 0
+    previous_f = 0
+    with open(data.log_dir, "w") as log_file:
+        for idx in range(data.HP_iteration):
+            epoch_start = time.time()
+            temp_start = epoch_start
+            print("Epoch: %s/%s" %(idx,data.HP_iteration))
+            if data.optimizer == "SGD":
+                optimizer = lr_decay(optimizer, idx, data.HP_lr_decay, data.HP_lr)
+            instance_count = 0
+            sample_id = 0
+            sample_loss = 0
+            total_loss = 0
+            right_token = 0
+            whole_token = 0
+            random.shuffle(data.train_Ids)
+            print("Shuffle: first input word list:", data.train_Ids[0][0])
+            ## set model in train model
+            model.train()
             model.zero_grad()
-        temp_time = time.time()
-        temp_cost = temp_time - temp_start
-        print("     Instance: %s; Time: %.2fs; loss: %.4f; acc: %s/%s=%.4f"%(end, temp_cost, sample_loss, right_token, whole_token,(right_token+0.)/whole_token))
+            batch_size = data.HP_batch_size
+            batch_id = 0
+            train_num = len(data.train_Ids)
+            total_batch = train_num//batch_size+1
+            for batch_id in range(total_batch):
+                start = batch_id * batch_size
+                end = (batch_id+1) * batch_size
+                if end > train_num:
+                    end = train_num
+                instance = data.train_Ids[start:end]
+                if not instance:
+                    continue
+                batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask  = batchify_with_label(instance, data.HP_gpu, True, data.sentence_classification)
+                instance_count += 1
+                loss, tag_seq = model.calculate_loss(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, batch_label, mask)
+                right, whole = predict_check(tag_seq, batch_label, mask, data.sentence_classification)
+                right_token += right
+                whole_token += whole
+                # print("loss:",loss.item())
+                sample_loss += loss.item()
+                total_loss += loss.item()
+                if end % 500 == 0:
+                    temp_time = time.time()
+                    temp_cost = temp_time - temp_start
+                    temp_start = temp_time
+                    print("     Instance: %s; Time: %.2fs; loss: %.4f; acc: %s/%s=%.4f"%(end, temp_cost, sample_loss, right_token, whole_token,(right_token+0.)/whole_token))
+                    if sample_loss > 1e8 or str(sample_loss) == "nan":
+                        print("ERROR: LOSS EXPLOSION (>1e8) ! PLEASE SET PROPER PARAMETERS AND STRUCTURE! EXIT....")
+                        exit(1)
+                    sys.stdout.flush()
+                    sample_loss = 0
+                loss.backward()
+                optimizer.step()
+                model.zero_grad()
+            temp_time = time.time()
+            temp_cost = temp_time - temp_start
+            print("     Instance: %s; Time: %.2fs; loss: %.4f; acc: %s/%s=%.4f"%(end, temp_cost, sample_loss, right_token, whole_token,(right_token+0.)/whole_token))
 
-        epoch_finish = time.time()
-        epoch_cost = epoch_finish - epoch_start
-        print("Epoch: %s training finished. Time: %.2fs, speed: %.2fst/s,  total loss: %s"%(idx, epoch_cost, train_num/epoch_cost, total_loss))
-        print("totalloss:", total_loss)
-        if total_loss > 1e8 or str(total_loss) == "nan":
-            print("ERROR: LOSS EXPLOSION (>1e8) ! PLEASE SET PROPER PARAMETERS AND STRUCTURE! EXIT....")
-            exit(1)
-        # continue
-        speed, acc, p, r, f, _,_ = evaluate(data, model, "dev")
-        dev_finish = time.time()
-        dev_cost = dev_finish - epoch_finish
+            epoch_finish = time.time()
+            epoch_cost = epoch_finish - epoch_start
+            print("Epoch: %s training finished. Time: %.2fs, speed: %.2fst/s,  total loss: %s"%(idx, epoch_cost, train_num / epoch_cost, total_loss))
+            print("totalloss:", total_loss)
+            if total_loss > 1e8 or total_loss is np.nan:
+                print("ERROR: LOSS EXPLOSION (>1e8) ! PLEASE SET PROPER PARAMETERS AND STRUCTURE! EXIT....")
+                exit(1)
+            # continue
+            speed, acc, p, r, f, _,_ = evaluate(data, model, "dev")
+            dev_finish = time.time()
+            dev_cost = dev_finish - epoch_finish
 
-        if data.seg:
-            current_score = f
-            print("Dev: time: %.2fs, speed: %.2fst/s; acc: %.4f, p: %.4f, r: %.4f, f: %.4f"%(dev_cost, speed, acc, p, r, f))
-        else:
-            current_score = acc
-            print("Dev: time: %.2fs speed: %.2fst/s; acc: %.4f"%(dev_cost, speed, acc))
-
-        if current_score > best_dev:
             if data.seg:
-                print("Exceed previous best f score:", best_dev)
+                current_score = f
+                print("Dev: time: %.2fs, speed: %.2fst/s; acc: %.4f, p: %.4f, r: %.4f, f: %.4f"%(dev_cost, speed, acc, p, r, f))
             else:
-                print("Exceed previous best acc score:", best_dev)
-            model_name = data.model_dir +'.'+ str(idx) + ".model"
-            print("Save current best model in file:", model_name)
-            torch.save(model.state_dict(), model_name)
-            best_dev = current_score
-        # ## decode test
-        speed, acc, p, r, f, _,_ = evaluate(data, model, "test")
-        test_finish = time.time()
-        test_cost = test_finish - dev_finish
-        if data.seg:
-            print("Test: time: %.2fs, speed: %.2fst/s; acc: %.4f, p: %.4f, r: %.4f, f: %.4f"%(test_cost, speed, acc, p, r, f))
-        else:
-            print("Test: time: %.2fs, speed: %.2fst/s; acc: %.4f"%(test_cost, speed, acc))
-        gc.collect()
+                current_score = acc
+                print("Dev: time: %.2fs speed: %.2fst/s; acc: %.4f"%(dev_cost, speed, acc))
+
+            if current_score > best_dev:
+                if data.seg:
+                    print("Exceed previous best f score:", best_dev)
+                else:
+                    print("Exceed previous best acc score:", best_dev)
+                model_name = data.model_dir +'.'+ str(idx) + ".model"
+                print("Save current best model in file:", model_name)
+                torch.save(model.state_dict(), model_name)
+                best_dev = current_score
+            # ## decode test
+            speed, acc, p, r, f_test, _, _ = evaluate(data, model, "test")
+            test_finish = time.time()
+            test_cost = test_finish - dev_finish
+            if data.seg:
+                print("Test: time: %.2fs, speed: %.2fst/s; acc: %.4f, p: %.4f, r: %.4f, f: %.4f" % (test_cost, speed, acc, p, r, f_test))
+            else:
+                print("Test: time: %.2fs, speed: %.2fst/s; acc: %.4f" % (test_cost, speed, acc))
+            gc.collect()
+
+            log_entry = {"iteration": idx,
+                          "train_f": f,
+                          "timestamp": datetime.datetime.now(datetime.timezone.utc)}
+            log_file.write(json.dumps(log_entry) + "\n")
+            if abs(f - previous_f) < data.stopping_criterion:
+                iters_without_change += 1
+            else:
+                iters_without_change = 0
+
+            if iters_without_change == data.iters_without_change:
+                print(f"Model f-measure has not changed in {iters_without_change} iterations. Stopping.")
+
+            previous_f = f
 
 
 def load_model_decode(data, name):
@@ -518,7 +537,8 @@ if __name__ == '__main__':
     parser.add_argument('--seg', default="True") 
     parser.add_argument('--raw') 
     parser.add_argument('--loadmodel')
-    parser.add_argument('--output') 
+    parser.add_argument('--output')
+    parser.add_argument('--log_dir', default="data/training.log")
 
     args = parser.parse_args()
     data = Data()
@@ -529,7 +549,7 @@ if __name__ == '__main__':
         data.test_dir = args.test
         data.model_dir = args.savemodel
         data.dset_dir = args.savedset
-        print("Save dset directory:",data.dset_dir)
+        print("Save dset directory:", data.dset_dir)
         save_model_dir = args.savemodel
         data.word_emb_dir = args.wordemb
         data.char_emb_dir = args.charemb
@@ -537,6 +557,7 @@ if __name__ == '__main__':
             data.seg = True
         else:
             data.seg = False
+        data.log_dir = args.log_dir
         print("Seed num:",seed_num)
     else:
         data.read_config(args.config)

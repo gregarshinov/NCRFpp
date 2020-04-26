@@ -51,6 +51,7 @@ class Data:
         self.dset_dir = None ## data vocabulary related file
         self.model_dir = None ## model save  file
         self.load_model_dir = None ## model load file
+        self.log_dir = None
 
         self.word_emb_dir = None
         self.char_emb_dir = None
@@ -91,6 +92,8 @@ class Data:
         self.average_batch_loss = False
         self.optimizer = "SGD" ## "SGD"/"AdaGrad"/"AdaDelta"/"RMSProp"/"Adam"
         self.status = "train"
+        self.stopping_criterion = .001
+        self.iters_without_change = 10
         ### Hyperparameters
         self.HP_cnn_layer = 4
         self.HP_iteration = 100
@@ -137,6 +140,7 @@ class Data:
         print("     Raw    file directory: %s"%(self.raw_dir))
         print("     Dset   file directory: %s"%(self.dset_dir))
         print("     Model  file directory: %s"%(self.model_dir))
+        print("     Log  file directory: %s" % (self.log_dir))
         print("     Loadmodel   directory: %s"%(self.load_model_dir))
         print("     Decode file directory: %s"%(self.decode_dir))
         print("     Train instance number: %s"%(len(self.train_texts)))
@@ -414,6 +418,9 @@ class Data:
         the_item = 'model_dir'
         if the_item in config:
             self.model_dir = config[the_item]
+        the_item = 'log_dir'
+        if the_item in config:
+            self.log_dir = config[the_item]
         the_item = 'load_model_dir'
         if the_item in config:
             self.load_model_dir = config[the_item]
@@ -488,6 +495,12 @@ class Data:
         the_item = 'status'
         if the_item in config:
             self.status = config[the_item]
+        the_item = 'stopping_criterion'
+        if the_item in config:
+            self.stopping_criterion = float(config[the_item])
+        the_item = 'iters_without_change'
+        if the_item in config:
+            self.iters_without_change = int(config[the_item])
 
         ## read Hyperparameters:
         the_item = 'cnn_layer'
