@@ -6,7 +6,6 @@
 
 from __future__ import print_function
 import time
-import datetime
 import sys
 import argparse
 import random
@@ -477,8 +476,7 @@ def train(data):
             gc.collect()
 
             log_entry = {"iteration": idx,
-                          "train_f": f,
-                          "timestamp": datetime.datetime.now(datetime.timezone.utc)}
+                          "train_f": f}
             log_file.write(json.dumps(log_entry) + "\n")
             if abs(f - previous_f) < data.stopping_criterion:
                 iters_without_change += 1
