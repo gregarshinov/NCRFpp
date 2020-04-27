@@ -473,10 +473,9 @@ def train(data):
                 print("Test: time: %.2fs, speed: %.2fst/s; acc: %.4f, p: %.4f, r: %.4f, f: %.4f" % (test_cost, speed, acc, p, r, f_test))
             else:
                 print("Test: time: %.2fs, speed: %.2fst/s; acc: %.4f" % (test_cost, speed, acc))
-            gc.collect()
 
             log_entry = {"iteration": idx,
-                          "train_f": f}
+                         "train_f": f}
             log_file.write(json.dumps(log_entry) + "\n")
             if abs(f - previous_f) < data.stopping_criterion:
                 iters_without_change += 1
@@ -486,6 +485,7 @@ def train(data):
             if iters_without_change == data.iters_without_change:
                 print(f"Model f-measure has not changed in {iters_without_change} iterations. Stopping.")
 
+            gc.collect()
             previous_f = f
 
 

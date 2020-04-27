@@ -378,8 +378,8 @@ class Data:
             score_string = "# "
             for idz in range(nbest):
                 score_string += format(pred_scores[idx][idz], '.4f')+" "
-            fout.write(score_string.strip() + "\n")
-
+            # fout.write(score_string.strip() + "\n")
+            fout.write("\n")
             for idy in range(sent_length):
                 try:  # Will fail with python3
                     label_string = content_list[idx][0][idy].encode('utf-8') + " "
